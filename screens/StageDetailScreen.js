@@ -8,7 +8,7 @@ export default function StageDetailScreen({ route }) {
   return (
     <View style={styles.container}>
       <WebView
-        source={{ uri: `https://apple-doctor-phi.vercel.app/stage/${stageId}` }}
+        source={{ uri: 'https://applehealthcheck.vercel.app/apple-visualizer' }}
         style={styles.webview}
         setSupportMultipleWindows={false}
         originWhitelist={["*"]}
@@ -20,15 +20,13 @@ export default function StageDetailScreen({ route }) {
         allowsInlineMediaPlayback={true}
         mediaPlaybackRequiresUserAction={false}
         onNavigationStateChange={(navState) => {
-          // Prevent navigation away from the specific stage page
-          if (!navState.url.includes(`/stage/${stageId}`)) {
-            return false;
-          }
+          // Allow navigation within the visualizer
           return true;
         }}
         onShouldStartLoadWithRequest={(request) => {
-          // Only allow loading the specific stage page
-          return request.url.includes(`/stage/${stageId}`);
+          // Allow all requests within the visualizer domain
+          return request.url.includes('applehealthcheck.vercel.app') || 
+                 request.url.includes('apple-visualizer');
         }}
       />
     </View>

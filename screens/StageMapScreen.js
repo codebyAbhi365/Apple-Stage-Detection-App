@@ -1,77 +1,207 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Linking, Alert } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 export default function StageMapScreen({ navigation }) {
-  const stages = [
-    { id: 0, title: 'Stage 0', desc: 'Initial Growth', color: '#34C759' },
-    { id: 1, title: 'Stage 1', desc: 'Early Development', color: '#FF9F0A' },
-    { id: 2, title: 'Stage 2', desc: 'Growing Phase', color: '#5856D6' },
-    { id: 3, title: 'Stage 3', desc: 'Maturation', color: '#FF375F' },
-    { id: 4, title: 'Stage 4', desc: 'Ripening', color: '#FF6B35' },
-    { id: 5, title: 'Stage 5', desc: 'Harvest Ready', color: '#8B5CF6' },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const webViewRef = useRef(null);
+  const [isWebViewReady, setIsWebViewReady] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const loadingTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    // Preload the WebView
+    const timer = setTimeout(() => {
+      setIsWebViewReady(true);
+    }, 100);
+    
+    return () => {
+      clearTimeout(timer);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleLoadStart = () => {
+    setLoading(true);
+    setError(false);
+    setLoadingProgress(0);
+    
+    // Set a timeout for 3D content loading (30 seconds)
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (loading) {
+        console.warn('3D content loading timeout - forcing load end');
+        setLoading(false);
+      }
+    }, 30000);
+  };
+
+  const handleLoadEnd = () => {
+    setLoading(false);
+    setLoadingProgress(100);
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+    }
+  };
+
+  const handleLoadProgress = (syntheticEvent) => {
+    const { nativeEvent } = syntheticEvent;
+    setLoadingProgress(nativeEvent.progress * 100);
+  };
+
+  const handleError = (syntheticEvent) => {
+    const { nativeEvent } = syntheticEvent;
+    console.warn('WebView error: ', nativeEvent);
+    console.warn('Error details: ', nativeEvent.description);
+    setError(true);
+    setLoading(false);
+  };
+
+  const handleHttpError = (syntheticEvent) => {
+    const { nativeEvent } = syntheticEvent;
+    console.warn('HTTP error: ', nativeEvent);
+    // Don't set error for HTTP errors, let the page handle it
+  };
+
+  const handleRetry = () => {
+    setError(false);
+    setLoading(true);
+    setLoadingProgress(0);
+    if (webViewRef.current) {
+      webViewRef.current.reload();
+    }
+  };
+
+  const handleWebViewMessage = (event) => {
+    // Handle messages from the website if needed
+    console.log('WebView message:', event.nativeEvent.data);
+  };
+
+  const openInBrowser = async () => {
+    const url = 'https://applehealthcheck.vercel.app/apple-visualizer';
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', 'Cannot open browser');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to open browser');
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Apple Stage Checker</Text>
-          <Text style={styles.subtitle}>Select a stage to view detailed information</Text>
-        </View>
-
-        <View style={styles.stagesGrid}>
-          {stages.map((stage) => (
-            <TouchableOpacity
-              key={stage.id}
-              style={[styles.stageCard, { borderColor: stage.color }]}
-              onPress={() => navigation.navigate('StageDetail', { stageId: stage.id })}
-            >
-              <View style={[styles.stageIcon, { backgroundColor: stage.color }]}>
-                <Text style={styles.stageNumber}>{stage.id}</Text>
-              </View>
-              <View style={styles.stageInfo}>
-                <Text style={styles.stageTitle}>{stage.title}</Text>
-                <Text style={styles.stageDesc}>{stage.desc}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Interactive 3D Apple Models</Text>
-          <View style={styles.previewContainer}>
-            <WebView
-              source={{ uri: 'https://apple-doctor-phi.vercel.app/stage/0' }}
-              style={styles.previewWebview}
-              setSupportMultipleWindows={false}
-              originWhitelist={["*"]}
-              javaScriptEnabled={true}
-              domStorageEnabled={true}
-              startInLoadingState={true}
-              scalesPageToFit={true}
-              mixedContentMode="compatibility"
-              allowsInlineMediaPlayback={true}
-              mediaPlaybackRequiresUserAction={false}
-              onNavigationStateChange={(navState) => {
-                // Prevent navigation away from stage pages
-                if (!navState.url.includes('/stage/')) {
-                  return false;
-                }
-                return true;
-              }}
-              onShouldStartLoadWithRequest={(request) => {
-                // Only allow loading stage pages
-                return request.url.includes('/stage/');
-              }}
-            />
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>Apple Stage Checker</Text>
+            <Text style={styles.subtitle}>Interactive 3D Apple Growth Visualization</Text>
           </View>
-          <Text style={styles.previewHint}>Interactive 3D Preview - Select a stage for full experience</Text>
-          <Text style={styles.infoText}>
-            Select any stage below to view detailed 3D models and get expert care tips for each development phase.
-          </Text>
+          <TouchableOpacity style={styles.browserButton} onPress={openInBrowser}>
+            <Text style={styles.browserButtonText}>🌐 Test in Browser</Text>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
+
+      {/* Loading Indicator */}
+      {loading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#34C759" />
+          <Text style={styles.loadingText}>Loading 3D Apple Models...</Text>
+          <Text style={styles.progressText}>{Math.round(loadingProgress)}% loaded</Text>
+          <View style={styles.progressBarContainer}>
+            <View style={[styles.progressBar, { width: `${loadingProgress}%` }]} />
+          </View>
+          <Text style={styles.loadingHint}>Loading 3D models and multilingual data...</Text>
+        </View>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Unable to Load Visualizer</Text>
+          <Text style={styles.errorText}>
+            Please check your internet connection and try again.
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* WebView Container */}
+      {isWebViewReady && (
+        <View style={styles.webviewContainer}>
+          <WebView
+            ref={webViewRef}
+            source={{ uri: 'https://applehealthcheck.vercel.app/apple-visualizer' }}
+            style={styles.webview}
+            onLoadStart={handleLoadStart}
+            onLoadEnd={handleLoadEnd}
+            onLoadProgress={handleLoadProgress}
+            onError={handleError}
+            onHttpError={handleHttpError}
+            onMessage={handleWebViewMessage}
+            // Core settings
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={false}
+            scalesPageToFit={true}
+            // Performance optimizations for 3D content
+            cacheEnabled={true}
+            cacheMode="LOAD_CACHE_ELSE_NETWORK"
+            // Network optimizations
+            thirdPartyCookiesEnabled={false}
+            sharedCookiesEnabled={false}
+            // Hardware acceleration for 3D models
+            renderToHardwareTextureAndroid={true}
+            androidLayerType="hardware"
+            // 3D content optimizations
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            // Enable WebGL and 3D acceleration
+            webGLEnabled={true}
+            allowsAirPlayForMediaPlayback={false}
+            // Faster rendering
+            setSupportMultipleWindows={false}
+            // Security and navigation
+            originWhitelist={["*"]}
+            allowsBackForwardNavigationGestures={true}
+            bounces={false}
+            scrollEnabled={true}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            // Additional performance settings - simplified for Android compatibility
+            automaticallyAdjustContentInsets={false}
+            contentInsetAdjustmentBehavior="never"
+            // Mixed content handling
+            mixedContentMode="compatibility"
+            // Navigation handling
+            onNavigationStateChange={(navState) => {
+              return true;
+            }}
+            onShouldStartLoadWithRequest={(request) => {
+              return request.url.includes('applehealthcheck.vercel.app') || 
+                     request.url.includes('apple-visualizer');
+            }}
+            // Additional performance props
+            incognito={false}
+            allowsFullscreenVideo={false}
+            allowsProtectedMedia={false}
+            // Faster loading props
+            pullToRefreshEnabled={false}
+            // Optimize for speed - remove problematic zoom props
+            // textZoom={100} - Removed to fix Android casting error
+            // minimumZoomScale={1} - Removed to fix Android casting error  
+            // maximumZoomScale={1} - Removed to fix Android casting error
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -81,104 +211,129 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F7F7F7',
   },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 28,
-  },
   header: {
-    marginBottom: 24,
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  headerText: {
+    flex: 1,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  stagesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 24,
-  },
-  stageCard: {
-    width: '48%',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 2,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  stageIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  stageNumber: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  stageInfo: {
-    alignItems: 'center',
-  },
-  stageTitle: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '700',
     color: '#111827',
     marginBottom: 4,
   },
-  stageDesc: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  infoCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  infoTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  infoText: {
+  subtitle: {
     fontSize: 14,
-    color: '#4B5563',
-    lineHeight: 22,
-  },
-  previewContainer: {
-    height: 200,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#000',
-    marginBottom: 12,
-  },
-  previewWebview: {
-    flex: 1,
-  },
-  previewHint: {
-    fontSize: 12,
     color: '#6B7280',
+  },
+  browserButton: {
+    backgroundColor: '#34C759',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  browserButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  webviewContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  webview: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  progressText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#34C759',
+    fontWeight: '600',
+  },
+  progressBarContainer: {
+    width: 200,
+    height: 4,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 2,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#34C759',
+    borderRadius: 2,
+  },
+  loadingHint: {
+    marginTop: 12,
+    fontSize: 12,
+    color: '#9CA3AF',
     textAlign: 'center',
     fontStyle: 'italic',
-    marginBottom: 8,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    backgroundColor: '#fff',
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#EF4444',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: '#34C759',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
